@@ -77,26 +77,41 @@ public class IPv4Util {
      * @return
      */
     public static String getRequestIP(HttpServletRequest request) {
-        String ip = parseIP(request.getHeader("x-forwarded-for"));
+        String[] headers = new String[] {
+            "x-forwarded-for", "Proxy-Client-IP", "WL-Proxy-Client-IP"
+        };
+
+        String ip = getRequestIP(request, headers, false);
         if ("".equals(ip)) {
-            ip = parseIP(request.getHeader("Proxy-Client-IP"));
+            ip = getRequestIP(request, headers, true);
         }
         if ("".equals(ip)) {
-            ip = parseIP(request.getHeader("WL-Proxy-Client-IP"));
+            ip = request.getRemoteAddr();
         }
-        if ("".equals(ip)) {
-            ip = parseIP(request.getRemoteAddr());
-        }
+
         return ip.trim();
+    }
+
+    private static String getRequestIP(HttpServletRequest request,
+            String[] headers, boolean allowPrivateIP) {
+        for (String header: headers) {
+            String ipListStr = request.getHeader(header);
+            String ip = parseIP(ipListStr, allowPrivateIP);
+            if (!"".equals(ip)) {
+                return ip;
+            }
+        }
+        return "";
     }
 
     /**
      * 从包含N个代理服务器地址的IP字符串中找出真实用户的ip,ipListStr里每个IP地址间以英文逗号","隔开
      * 
      * @param ipListStr
+     * @param allowPrivateIP
      * @return
      */
-    private static String parseIP(String ipListStr) {
+    private static String parseIP(String ipListStr, boolean allowPrivateIP) {
         if (null == ipListStr) {
             return "";
         }
@@ -105,11 +120,11 @@ public class IPv4Util {
         for (int i = ips.length - 1; i >= 0; i--) {
             String ip = ips[i].trim();
             // 非有效ip地址，继续检查下一个
-            if(!isValidIP(ip)) {
+            if (!isValidIP(ip)) {
                 continue;
             }
             // 私有ip地址，继续检查下一个
-            if(isInIPAddrRange(privateIPSet, ip)) {
+            if (!allowPrivateIP && isInIPAddrRange(privateIPSet, ip)) {
                 continue;
             }
             result = ip;
