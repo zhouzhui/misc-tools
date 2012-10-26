@@ -1,6 +1,7 @@
 package tool.network;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
@@ -8,21 +9,57 @@ import java.util.Set;
 import javax.servlet.http.HttpServletRequest;
 
 public class IPv4Util {
-    private static final Set<String> privateIPSet = new HashSet<String>();
+    private static final Set<String> ALL_PRIVATE_IP_SEGMENTS;
+
+    private static final Set<String> LINKLOCAL_IP_SEGMENTS;
+
+    private static final Set<String> LOOPBACK_IP_SEGMENTS;
+
+    private static final Set<String> RFC1918_IP_SEGMENTS;
     static {
-        // Private IPv4 addresses as per RFC 1918
-        addIPAddrs(privateIPSet, "10.0.0.0/8");
-        addIPAddrs(privateIPSet, "172.16.0.0/12");
-        addIPAddrs(privateIPSet, "192.168.0.0/16");
+        Set<String> allPrivateIPSegs = new HashSet<String>();
+        Set<String> linklocalIPSegs = new HashSet<String>();
+        Set<String> loopbackIPSegs = new HashSet<String>();
+        Set<String> rfc1918IPSegs = new HashSet<String>();
+
         // Automatic Private IP addresses reserved by IANA.
-        addIPAddrs(privateIPSet, "169.254.0.0/16");
+        addIPAddrs(linklocalIPSegs, "169.254.0.0/16");
         // Loopback IP addresses
-        addIPAddrs(privateIPSet, "127.0.0.1/8");
+        addIPAddrs(loopbackIPSegs, "127.0.0.1/8");
+        // Private IPv4 addresses as per RFC 1918
+        addIPAddrs(rfc1918IPSegs, "10.0.0.0/8");
+        addIPAddrs(rfc1918IPSegs, "172.16.0.0/12");
+        addIPAddrs(rfc1918IPSegs, "192.168.0.0/16");
+
+        allPrivateIPSegs.addAll(linklocalIPSegs);
+        allPrivateIPSegs.addAll(loopbackIPSegs);
+        allPrivateIPSegs.addAll(rfc1918IPSegs);
+
+        RFC1918_IP_SEGMENTS = Collections.unmodifiableSet(rfc1918IPSegs);
+        LINKLOCAL_IP_SEGMENTS = Collections.unmodifiableSet(linklocalIPSegs);
+        LOOPBACK_IP_SEGMENTS = Collections.unmodifiableSet(loopbackIPSegs);
+        ALL_PRIVATE_IP_SEGMENTS = Collections.unmodifiableSet(allPrivateIPSegs);
+    }
+
+    public static Set<String> getAllPrivateIPSegments() {
+        return ALL_PRIVATE_IP_SEGMENTS;
+    }
+
+    public static Set<String> getLoopbackIPSegments() {
+        return LOOPBACK_IP_SEGMENTS;
+    }
+
+    public static Set<String> getLinklocalIPSegments() {
+        return LINKLOCAL_IP_SEGMENTS;
+    }
+
+    public static Set<String> getRFC1918IPSegments() {
+        return RFC1918_IP_SEGMENTS;
     }
 
     /**
      * @param ipset
-     *            包含IP地址或IP段的集合
+     *            二进制形式的IP地址或IP段的集合
      * @param ip
      *            要加入到集合中的IP地址或CIDR表示法的IP段
      */
@@ -47,7 +84,7 @@ public class IPv4Util {
      * 判断给定的 <code>ip</code> 是否在 <code>ipranges</code> 范围内。
      * 
      * @param ipranges
-     *            IP地址或CIDR表示法的IP段的集合
+     *            二进制形式的IP地址或IP段的集合
      * @param ip
      *            需要判断的IP地址
      * @return 若 <code>ip</code> 不是一个有效的IP地址，返回false；若 <code>ip</code> 不在
@@ -77,13 +114,31 @@ public class IPv4Util {
      * @return
      */
     public static String getRequestIP(HttpServletRequest request) {
-        String[] headers = new String[] {
-            "x-forwarded-for", "Proxy-Client-IP", "WL-Proxy-Client-IP"
-        };
+        return getRequestIP(request, false);
+    }
 
-        String ip = getRequestIP(request, headers, false);
+    /**
+     * 获取用户的IP地址（最接近用户的外网IP地址）
+     * 
+     * @param request
+     * @param rightToLeft
+     *            解析x-forwarded-for等头信息时是否从右往左开始解析
+     * @return
+     */
+    public static String getRequestIP(HttpServletRequest request,
+            boolean rightToLeft) {
+        String ip = request.getRemoteAddr();
+        // 非私有地址，直接返回remoteAddr
+        if (!isInIPAddrRange(ALL_PRIVATE_IP_SEGMENTS, ip)) {
+            return ip;
+        }
+
+        String[] headers = new String[] { "x-forwarded-for", "Proxy-Client-IP",
+            "WL-Proxy-Client-IP" };
+
+        ip = getRequestIP(request, headers, false, rightToLeft);
         if ("".equals(ip)) {
-            ip = getRequestIP(request, headers, true);
+            ip = getRequestIP(request, headers, true, rightToLeft);
         }
         if ("".equals(ip)) {
             ip = request.getRemoteAddr();
@@ -93,10 +148,10 @@ public class IPv4Util {
     }
 
     private static String getRequestIP(HttpServletRequest request,
-            String[] headers, boolean allowPrivateIP) {
+            String[] headers, boolean allowPrivateIP, boolean rightToLeft) {
         for (String header: headers) {
             String ipListStr = request.getHeader(header);
-            String ip = parseIP(ipListStr, allowPrivateIP);
+            String ip = parseIP(ipListStr, allowPrivateIP, rightToLeft);
             if (!"".equals(ip)) {
                 return ip;
             }
@@ -109,22 +164,37 @@ public class IPv4Util {
      * 
      * @param ipListStr
      * @param allowPrivateIP
+     * @param 从右往左找
      * @return
      */
-    private static String parseIP(String ipListStr, boolean allowPrivateIP) {
+    private static String parseIP(String ipListStr, boolean allowPrivateIP,
+            boolean rightToLeft) {
         if (null == ipListStr) {
             return "";
         }
         String[] ips = ipListStr.split(",");
         String result = "";
-        for (int i = ips.length - 1; i >= 0; i--) {
-            String ip = ips[i].trim();
+        int start = 0;
+        int guard = ips.length - 1;
+
+        if (rightToLeft) {
+            start = (ips.length - 1) * -1;
+            guard = 0;
+        }
+
+        for (; start <= guard; start++) {
+            int index = start;
+            if (index < 0) {
+                index = -1 * index;
+            }
+
+            String ip = ips[index].trim();
             // 非有效ip地址，继续检查下一个
             if (!isValidIP(ip)) {
                 continue;
             }
-            // 私有ip地址，继续检查下一个
-            if (!allowPrivateIP && isInIPAddrRange(privateIPSet, ip)) {
+            // 私有ip地址且不允许返回私有ip地址，继续检查下一个
+            if (!allowPrivateIP && isInIPAddrRange(ALL_PRIVATE_IP_SEGMENTS, ip)) {
                 continue;
             }
             result = ip;
