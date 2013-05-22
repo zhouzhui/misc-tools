@@ -1,0 +1,16 @@
+#! /usr/bin/perl -w
+use strict;
+
+my $chars="23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz";
+my $length=8;
+sub randpwd(){
+    my $chars_length = length($chars);
+    my $pwd = "";
+    for(my $i=0;$i<$length;$i++){
+        my $index = int(rand($chars_length));
+        $pwd = "$pwd".substr($chars,$index,1);
+    }
+    return $pwd;
+}
+
+print (&randpwd."\n");
