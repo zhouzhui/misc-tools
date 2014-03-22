@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns:ivy="antlib:org.apache.ivy.ant" name="misc-utils" basedir="." default="compile">
+	<property file="${basedir}/ivy.properties" />
+	<property file="${basedir}/build.properties" />
+	<path id="libs">
+		<fileset dir="${lib.dir}">
+			<include name="**/*.jar" />
+		</fileset>
+	</path>
+
+	<import file="ivy-ant.xml" />
+
+	<target name="compile" depends="clean,ivy-resolve">
+		<mkdir dir="${build.dir}" />
+		<mkdir dir="${build.classes}" />
+		<javac destdir="${build.classes}" target="${compile.level}" debug="${compile.debug}" deprecation="${compile.deprecation}" optimize="${compile.optimize}" failonerror="true" encoding="${build.encoding}" includeantruntime="false" >
+			<src path="${src.dir}" />
+			<classpath refid="libs" />
+		</javac>
+
+		<copy todir="${build.classes}" overwrite="true">
+			<fileset dir="${src.dir}">
+				<exclude name="**/*.java" />
+			</fileset>
+		</copy>
+	</target>
+
+	<target name="clean">
+		<delete dir="${build.dir}" />
+	</target>
+</project>

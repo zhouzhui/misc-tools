@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ivysettings>
+  <settings defaultResolver="default" />
+  <include url="${ivy.default.settings.dir}/ivysettings-local.xml" />
+  <property name="official-maven2-root" value="http://repo1.maven.org/maven2/" override="true" />
+  <properties file="${basedir}/ivy.properties" />
+
+  <resolvers>
+    <ibiblio name="maven2-official" root="${official-maven2-root}" m2compatible="true" />
+    <chain name="default" returnFirst="true" checkmodified="true" dual="true">
+      <resolver ref="local" />
+      <resolver ref="maven2-official" />
+    </chain>
+  </resolvers>
+</ivysettings>

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ivy-module version="2.0" 
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:noNamespaceSchemaLocation=
+                   "http://ant.apache.org/ivy/schemas/ivy.xsd">
+    <info organisation="${organisation}" module="${module}" />
+    <configurations>
+        <conf name="default" />
+        <conf name="test" extends="default" />
+        <conf name="compile" extends="default" />
+    </configurations>
+    <publications>
+        <artifact name="${module}" type="jar" conf="default" />
+        <artifact name="${module}-src" type="zip" conf="default" />
+    </publications>
+    <dependencies>
+        <dependency org="org.apache.httpcomponents" name="httpclient" rev="4.3.3" />
+        <dependency org="javax.servlet" name="servlet-api" rev="2.5"
+            conf="compile->default" />
+    </dependencies>
+</ivy-module>
